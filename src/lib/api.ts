@@ -5,10 +5,30 @@ export interface ChatMessage {
   message: string;
   profession?: string;
   sector?: string;
+  interview_type?: string;
+  question_count?: number;
+  total_questions?: number;
 }
 
 export interface ChatResponse {
   response: string;
+  question_count?: number;
+  total_questions?: number;
+  interview_ended?: boolean;
+}
+
+export interface EvaluationRequest {
+  messages: Array<{
+    role: string;
+    content: string;
+  }>;
+  profession: string;
+  sector: string;
+  interview_type: string;
+}
+
+export interface EvaluationResponse {
+  evaluation: string;
 }
 
 export class APIClient {
@@ -52,6 +72,28 @@ export class APIClient {
       return data;
     } catch (error) {
       console.error("Error checking health:", error);
+      throw error;
+    }
+  }
+
+  async evaluateInterview(evaluation: EvaluationRequest): Promise<EvaluationResponse> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/evaluate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(evaluation),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error evaluating interview:", error);
       throw error;
     }
   }

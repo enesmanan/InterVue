@@ -17,7 +17,7 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  # React development server
+    allow_origins=["http://localhost:8080"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,23 +28,141 @@ class ChatMessage(BaseModel):
     message: str
     profession: str | None = None
     sector: str | None = None
+    interview_type: str | None = None
+    question_count: int | None = None
+    total_questions: int | None = None
 
 @app.post("/api/chat")
 async def chat(chat_input: ChatMessage):
     try:
         # Initialize chat for first message
         if chat_input.role == "system":
-            context = f"You are an interviewer conducting a job interview for a {chat_input.profession} position"
-            if chat_input.sector:
-                context += f" in the {chat_input.sector} sector"
-            context += ". Conduct the interview professionally and evaluate the candidate's responses."
+            # Determine total questions based on interview type
+            question_counts = {
+                "Ön Mülakat": 4,
+                "Teknik Mülakat": 7, 
+                "Davranışsal Mülakat": 5,
+                "Vaka Analizi": 6
+            }
+            total_questions = question_counts.get(chat_input.interview_type, 5)
+            
+            # Interview type specific prompts
+            type_prompts = {
+                "Ön Mülakat": f"""Sen bir {chat_input.profession} pozisyonu için Ön Mülakat yapan profesyonel bir mülakatçısın.
+
+MÜLAKAT ODAĞI: Temel kişisel tanıtım, motivasyon ve genel uygunluk
+SORU ALANLARI: Kişisel tanıtım, neden bu şirket/pozisyon, temel deneyimler, beklentiler
+TOPLAM SORU: {total_questions}
+
+Her yanıtın MAKSIMUM 2-3 cümle olsun. Sıcak ve profesyonel ol.""",
+
+                "Teknik Mülakat": f"""Sen bir {chat_input.profession} pozisyonu için Teknik Mülakat yapan profesyonel bir mülakatçısın.
+
+MÜLAKAT ODAĞI: Mesleki bilgi, teknik yetkinlik, problem çözme becerileri
+SORU ALANLARI: Teknik sorular, projeler, araçlar/teknolojiler, problem çözme senaryoları
+TOPLAM SORU: {total_questions}
+
+Her yanıtın MAKSIMUM 2-3 cümle olsun. Teknik detaylara odaklan.""",
+
+                "Davranışsal Mülakat": f"""Sen bir {chat_input.profession} pozisyonu için Davranışsal Mülakat yapan profesyonel bir mülakatçısın.
+
+MÜLAKAT ODAĞI: STAR metoduyla davranış analizi, soft skills değerlendirmesi
+SORU ALANLARI: Takım çalışması, liderlik, çatışma yönetimi, stres altında çalışma
+TOPLAM SORU: {total_questions}
+
+Her yanıtın MAKSIMUM 2-3 cümle olsun. STAR (Situation-Task-Action-Result) metodunu vurgula.""",
+
+                "Vaka Analizi": f"""Sen bir {chat_input.profession} pozisyonu için Vaka Analizi yapan profesyonel bir mülakatçısın.
+
+MÜLAKAT ODAĞI: Analitik düşünce, stratejik planlama, iş çözümleri
+SORU ALANLARI: İş senaryoları, vaka analizleri, stratejik düşünme, karar verme
+TOPLAM SORU: {total_questions}
+
+Her yanıtın MAKSIMUM 2-3 cümle olsun. Analitik ve stratejik sorular sor."""
+            }
+            
+            context = type_prompts.get(chat_input.interview_type, type_prompts["Ön Mülakat"])
+            context += f"\n\nİlk sorunla başla ve kısa bir karşılama yap."
             
             response = model.generate_content(context)
-            return {"response": response.text}
+            return {"response": response.text, "question_count": 1, "total_questions": total_questions}
         
-        # Handle regular chat messages
-        response = model.generate_content(chat_input.message)
-        return {"response": response.text}
+        # Handle regular chat messages with question count tracking
+        current_question = chat_input.question_count or 1
+        total_questions = chat_input.total_questions or 5
+        
+        if current_question >= total_questions:
+            # Interview is ending, prepare final response
+            context = f"""Bu {chat_input.interview_type} tamamlandı. Kısa bir teşekkür mesajı ver ve değerlendirme sonuçlarının hazırlandığını belirt. MAKSIMUM 2 cümle."""
+            response = model.generate_content(context)
+            return {"response": response.text, "question_count": total_questions, "interview_ended": True}
+        
+        # Continue with next question based on interview type
+        type_contexts = {
+            "Ön Mülakat": f"""Sen bir {chat_input.profession} ön mülakatçısısın. Aday: "{chat_input.message}"
+
+Bu {current_question}/{total_questions}. soru. {"Son soru yaklaşıyor!" if current_question >= total_questions - 1 else ""} 
+Cevabı kısa değerlendir ve sonraki soruyu sor. Odak: kişisel uygunluk, motivasyon.""",
+
+            "Teknik Mülakat": f"""Sen bir {chat_input.profession} teknik mülakatçısısın. Aday: "{chat_input.message}"
+
+Bu {current_question}/{total_questions}. soru. {"Son soru yaklaşıyor!" if current_question >= total_questions - 1 else ""} 
+Cevabı teknik açıdan değerlendir ve sonraki teknik soruyu sor.""",
+
+            "Davranışsal Mülakat": f"""Sen bir {chat_input.profession} davranışsal mülakatçısısın. Aday: "{chat_input.message}"
+
+Bu {current_question}/{total_questions}. soru. {"Son soru yaklaşıyor!" if current_question >= total_questions - 1 else ""} 
+STAR metoduyla değerlendir ve sonraki davranışsal soruyu sor.""",
+
+            "Vaka Analizi": f"""Sen bir {chat_input.profession} vaka analizi mülakatçısısın. Aday: "{chat_input.message}"
+
+Bu {current_question}/{total_questions}. soru. {"Son soru yaklaşıyor!" if current_question >= total_questions - 1 else ""} 
+Analitik yaklaşımını değerlendir ve sonraki vaka sorusunu sor."""
+        }
+        
+        context = type_contexts.get(chat_input.interview_type, type_contexts["Ön Mülakat"])
+        context += " MAKSIMUM 2-3 cümle kullan."
+        
+        response = model.generate_content(context)
+        return {"response": response.text, "question_count": current_question + 1, "total_questions": total_questions}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class EvaluationRequest(BaseModel):
+    messages: list
+    profession: str
+    sector: str
+    interview_type: str
+
+@app.post("/api/evaluate")
+async def evaluate_interview(eval_request: EvaluationRequest):
+    try:
+        # Prepare conversation history for evaluation
+        conversation = ""
+        for msg in eval_request.messages:
+            role = "Mülakatçı" if msg["role"] == "assistant" else "Aday"
+            conversation += f"{role}: {msg['content']}\n"
+        
+        evaluation_prompt = f"""Bu {eval_request.profession} pozisyonu için yapılan {eval_request.interview_type} mülakat değerlendirmesi:
+
+{conversation}
+
+Lütfen şu formatta KISA ve NET bir değerlendirme yap:
+
+**GÜÇLÜ YÖNLERİ:**
+- [3-4 madde, her biri 1 cümle]
+
+**GELİŞİM ALANLARİ:**
+- [3-4 madde, her biri 1 cümle]
+
+**GENEL DEĞERLENDIRME:**
+[2-3 cümle özet]
+
+**PUAN: X/10**"""
+        
+        response = model.generate_content(evaluation_prompt)
+        return {"evaluation": response.text}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
