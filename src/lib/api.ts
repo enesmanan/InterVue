@@ -1,4 +1,5 @@
-const API_BASE_URL = "http://localhost:8000";
+// Use relative URLs in production, localhost in development
+const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : "http://localhost:8000";
 
 export interface ChatMessage {
   role: string;

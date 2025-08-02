@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -17,11 +19,39 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  
+    #allow_origins=["http://localhost:8080"],
+    allow_origins=["*"],  # Allow all origins for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files (frontend build)
+# Get the path to the dist directory
+dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dist")
+assets_path = os.path.join(dist_path, "assets")
+index_path = os.path.join(dist_path, "index.html")
+
+# Check if dist directory exists and mount static files
+if os.path.exists(assets_path):
+    app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+
+# Serve frontend static files
+@app.get("/", response_class=FileResponse)
+async def serve_frontend():
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Frontend not built yet. Please run ' build' first.", "build_command": "npm run build"}
+
+@app.get("/{path:path}")
+async def serve_frontend_routes(path: str):
+    # For any route that doesn't start with /api, serve the frontend
+    if not path.startswith("api/"):
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"message": "Frontend not built yet. Please run 'npm run build' first.", "build_command": "npm run build"}
+    # If it's an API route but doesn't exist, let FastAPI handle the 404
+    raise HTTPException(status_code=404, detail="API endpoint not found")
 
 class ChatMessage(BaseModel):
     role: str
