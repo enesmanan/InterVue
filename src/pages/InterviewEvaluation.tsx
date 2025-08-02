@@ -56,38 +56,72 @@ const InterviewEvaluation = () => {
   const formatEvaluation = (evalText: string) => {
     if (!evalText) return null;
 
-    console.log("Raw evaluation text:", evalText); // Debug log
-
-    // More robust parsing approach
+    console.log("Raw evaluation text:", evalText);
     const formattedSections: { [key: string]: string[] } = {};
     
-    // Extract strengths
-    const strengthsMatch = evalText.match(/\*\*GÜÇLÜ YÖNLERİ?:?\*\*(.*?)(?=\*\*|$)/s);
-    if (strengthsMatch) {
-      const items = strengthsMatch[1].split('\n').filter(line => line.trim() && line.includes('-'));
-      formattedSections["GÜÇLÜ YÖNLERİ:"] = items.map(item => item.replace(/^-\s*/, '').trim()).filter(Boolean);
+    // Extract strengths - try multiple patterns
+    const strengthsPatterns = [
+      /\*\*GÜÇLÜ YÖNLERİ?:?\*\*(.*?)(?=\*\*|$)/s,
+      /GÜÇLÜ YÖNLERİ?:?\*\*(.*?)(?=\*\*|$)/s,
+      /\*\*GÜÇLÜ YÖNLERİ?(.*?)(?=\*\*|$)/s,
+      /GÜÇLÜ YÖNLERİ?(.*?)(?=GELİŞİM|GENEL|PUAN|$)/s
+    ];
+    
+    for (const pattern of strengthsPatterns) {
+      const match = evalText.match(pattern);
+      if (match) {
+        const items = match[1].split(/\n/).filter(line => line.trim()).map(item => item.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
+        if (items.length > 0) {
+          formattedSections["GÜÇLÜ YÖNLERİ:"] = items;
+          break;
+        }
+      }
     }
 
-    // Extract development areas - try multiple patterns
-    const devMatch = evalText.match(/\*\*GELİŞİM ALANLAR[IİI]?:?\*\*(.*?)(?=\*\*|$)/s);
-    if (devMatch) {
-      const items = devMatch[1].split('\n').filter(line => line.trim() && line.includes('-'));
-      formattedSections["GELİŞİM ALANLARI:"] = items.map(item => item.replace(/^-\s*/, '').trim()).filter(Boolean);
+    // Extract development areas - try multiple patterns  
+    const devPatterns = [
+      /\*\*GELİŞİM ALANLAR[IİI]?:?\*\*(.*?)(?=\*\*|$)/s,
+      /\*\*GELİŞİM ALANLARİ:?\*\*(.*?)(?=\*\*|$)/s,
+      /GELİŞİM ALANLAR[IİI]?:?\*\*(.*?)(?=\*\*|$)/s,
+      /GELİŞİM ALANLARİ:?\*\*(.*?)(?=\*\*|$)/s,
+      /\*\*GELİŞİM ALANLAR[IİI]?(.*?)(?=\*\*|$)/s,
+      /GELİŞİM ALANLAR[IİI]?(.*?)(?=GENEL|PUAN|$)/s
+    ];
+
+    for (const pattern of devPatterns) {
+      const match = evalText.match(pattern);
+      if (match) {
+        const items = match[1].split(/\n/).filter(line => line.trim()).map(item => item.replace(/^[-•*\s]+/, '').trim()).filter(Boolean);
+        if (items.length > 0) {
+          formattedSections["GELİŞİM ALANLARI:"] = items;
+          break;
+        }
+      }
     }
 
     // Extract general evaluation
-    const generalMatch = evalText.match(/\*\*GENEL DEĞERLENDİRME:?\*\*(.*?)(?=\*\*|$)/s);
-    if (generalMatch) {
-      const content = generalMatch[1].trim().split('\n').filter(line => line.trim() && !line.includes('-'));
-      formattedSections["GENEL DEĞERLENDIRME:"] = content.map(line => line.trim()).filter(Boolean);
+    const generalPatterns = [
+      /\*\*GENEL DEĞERLENDİRME:?\*\*(.*?)(?=\*\*|$)/s,
+      /GENEL DEĞERLENDİRME:?\*\*(.*?)(?=\*\*|$)/s,
+      /\*\*GENEL DEĞERLENDİRME?(.*?)(?=PUAN|$)/s
+    ];
+
+    for (const pattern of generalPatterns) {
+      const match = evalText.match(pattern);
+      if (match) {
+        const content = match[1].trim().split('\n').filter(line => line.trim() && !line.includes('-')).map(line => line.trim()).filter(Boolean);
+        if (content.length > 0) {
+          formattedSections["GENEL DEĞERLENDIRME:"] = content;
+          break;
+        }
+      }
     }
 
     // Extract score
-    const scoreMatch = evalText.match(/PUAN:\s*(\d+)\/10/);
+    const scoreMatch = evalText.match(/PUAN:?\s*(\d+)\/10/) || evalText.match(/(\d+)\/10/);
     const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
 
-    console.log("Parsed sections:", formattedSections); // Debug log
-
+    console.log("Parsed sections:", formattedSections);
     return { sections: formattedSections, score };
   };
 
